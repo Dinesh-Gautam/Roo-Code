@@ -17,6 +17,13 @@ interface NewTaskParams {
 	todos?: string
 }
 
+type ToolMessage = {
+	tool: string
+	mode: string
+	content: string
+	todos: TodoItem[]
+}
+
 export class NewTaskTool extends BaseTool<"new_task"> {
 	readonly name = "new_task" as const
 
@@ -92,10 +99,6 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 
 			task.consecutiveMistakeCount = 0
 
-			// Un-escape one level of backslashes before '@' for hierarchical subtasks
-			// Un-escape one level: \\@ -> \@ (removes one backslash for hierarchical subtasks)
-			const unescapedMessage = message.replace(/\\\\@/g, "\\@")
-
 			// Verify the mode exists
 			const targetMode = getModeBySlug(mode, state?.customModes)
 
@@ -106,14 +109,26 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 
 			const toolMessage = JSON.stringify({
 				tool: "newTask",
-				mode: targetMode.name,
+				mode,
 				content: message,
 				todos: todoItems,
 			})
 
-			const didApprove = await askApproval("tool", toolMessage)
+			let approvedMessage = toolMessage
+			let isModified = false
+			const isApproved = await askApproval(
+				"tool",
+				toolMessage,
+				undefined,
+				undefined,
+				({ text, isModified: modified }) => {
+					if (!modified || !text) return
+					isModified = true
+					approvedMessage = text
+				},
+			)
 
-			if (!didApprove) {
+			if (!isApproved) {
 				return
 			}
 
@@ -123,12 +138,18 @@ export class NewTaskTool extends BaseTool<"new_task"> {
 				task.checkpointSave(true)
 			}
 
+			const approvedSubtask: ToolMessage = JSON.parse(approvedMessage)
+
+			// Un-escape one level of backslashes before '@' for hierarchical subtasks
+			// Un-escape one level: \\@ -> \@ (removes one backslash for hierarchical subtasks)
+			approvedSubtask.content = approvedSubtask.content.replace(/\\\\@/g, "\\@")
+
 			// Delegate parent and open child as sole active task
-			const child = await (provider as any).delegateParentAndOpenChild({
+			const child = await provider.delegateParentAndOpenChild({
 				parentTaskId: task.taskId,
-				message: unescapedMessage,
+				message: approvedSubtask.content,
 				initialTodos: todoItems,
-				mode,
+				mode: approvedSubtask.mode,
 			})
 
 			// Reflect delegation in tool result (no pause/unpause, no wait)

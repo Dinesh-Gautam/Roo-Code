@@ -9,6 +9,7 @@ import type {
 	BrowserActionParams,
 	GenerateImageParams,
 } from "@roo-code/types"
+import type { ClineAskResponse } from "./WebviewMessage"
 
 export type ToolResponse = string | Array<Anthropic.TextBlockParam | Anthropic.ImageBlockParam>
 
@@ -17,6 +18,7 @@ export type AskApproval = (
 	partialMessage?: string,
 	progressStatus?: ToolProgressStatus,
 	forceApproval?: boolean,
+	onApprove?: (args: { response: ClineAskResponse; text?: string; isModified?: boolean }) => void,
 ) => Promise<boolean>
 
 export type HandleError = (action: string, error: Error) => Promise<void>

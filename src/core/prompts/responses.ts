@@ -38,6 +38,17 @@ export const formatResponse = {
 		return `The user approved this operation and provided the following context:\n<feedback>\n${feedback}\n</feedback>`
 	},
 
+	toolApprovedWithModifications: (modification?: string, protocol?: ToolProtocol) => {
+		if (isNativeProtocol(protocol ?? TOOL_PROTOCOL.XML)) {
+			return JSON.stringify({
+				status: "approved",
+				message: "The user modified this operation with following context",
+				modification: modification,
+			})
+		}
+		return `The user modified this operation and provided the following context:\n<modification>\n${modification}\n</modification>`
+	},
+
 	toolError: (error?: string, protocol?: ToolProtocol) => {
 		if (isNativeProtocol(protocol ?? TOOL_PROTOCOL.XML)) {
 			return JSON.stringify({

@@ -42,6 +42,7 @@ import { experiments, EXPERIMENT_IDS } from "../../shared/experiments"
 import { applyDiffTool as applyDiffToolClass } from "../tools/ApplyDiffTool"
 import { isNativeProtocol } from "@roo-code/types"
 import { resolveToolProtocol } from "../../utils/resolveToolProtocol"
+import type { ClineAskResponse } from "../../shared/WebviewMessage"
 
 /**
  * Processes and presents assistant message content to the user interface.
@@ -474,6 +475,7 @@ export async function presentAssistantMessage(cline: Task) {
 
 			// Track if we've already pushed a tool result for this tool call (native protocol only)
 			let hasToolResult = false
+			let hasToolDescription = false
 
 			// Determine protocol by checking if this tool call has an ID.
 			// Native protocol tool calls ALWAYS have an ID (set when parsed from tool_call chunks).
@@ -532,7 +534,10 @@ export async function presentAssistantMessage(cline: Task) {
 					hasToolResult = true
 				} else {
 					// For XML protocol, add as text blocks (legacy behavior)
-					cline.userMessageContent.push({ type: "text", text: `${toolDescription()} Result:` })
+					if (!hasToolDescription) {
+						cline.userMessageContent.push({ type: "text", text: `${toolDescription()} Result:` })
+						hasToolDescription = true
+					}
 
 					if (typeof content === "string") {
 						cline.userMessageContent.push({
@@ -560,12 +565,13 @@ export async function presentAssistantMessage(cline: Task) {
 				// allow multiple tool calls in sequence (don't set didAlreadyUseTool)
 			}
 
-			const askApproval = async (
+			async function askApproval(
 				type: ClineAsk,
 				partialMessage?: string,
 				progressStatus?: ToolProgressStatus,
 				isProtected?: boolean,
-			) => {
+				onApprove?: (args: { response: ClineAskResponse; text?: string; isModified: boolean }) => void,
+			) {
 				const { response, text, images } = await cline.ask(
 					type,
 					partialMessage,
@@ -574,7 +580,7 @@ export async function presentAssistantMessage(cline: Task) {
 					isProtected || false,
 				)
 
-				if (response !== "yesButtonClicked") {
+				if (response !== "yesButtonClicked" && response !== "approvedWithModification") {
 					// Handle both messageResponse and noButtonClicked with text.
 					if (text) {
 						await cline.say("user_feedback", text, images)
@@ -592,12 +598,25 @@ export async function presentAssistantMessage(cline: Task) {
 				}
 
 				// Handle yesButtonClicked with text.
-				if (text) {
+				if (text && response === "yesButtonClicked") {
 					await cline.say("user_feedback", text, images)
 					pushToolResult(
 						formatResponse.toolResult(formatResponse.toolApprovedWithFeedback(text, toolProtocol), images),
 					)
 				}
+
+				// Handle yesButtonClicked with modified text
+				if (text && response === "approvedWithModification") {
+					await cline.say("user_tool_modification", text, images)
+					pushToolResult(
+						formatResponse.toolResult(
+							formatResponse.toolApprovedWithModifications(text, toolProtocol),
+							images,
+						),
+					)
+				}
+
+				if (onApprove) onApprove({ response, text, isModified: response === "approvedWithModification" })
 
 				return true
 			}

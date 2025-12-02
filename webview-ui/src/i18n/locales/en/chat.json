@@ -253,6 +253,7 @@
 	},
 	"subtasks": {
 		"wantsToCreate": "Roo wants to create a new subtask in {{mode}} mode",
+		"userEdited": "You edited subtask to create new task in {{mode}} mode",
 		"wantsToFinish": "Roo wants to finish this subtask",
 		"newTaskContent": "Subtask Instructions",
 		"completionContent": "Subtask Completed",

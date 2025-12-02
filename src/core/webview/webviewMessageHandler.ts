@@ -1546,6 +1546,28 @@ export const webviewMessageHandler = async (
 			break
 		}
 
+		case "submitEditedTool": {
+			if (
+				provider.getCurrentTask() &&
+				typeof message.value === "number" &&
+				message.value &&
+				message.editedMessageContent
+			) {
+				const currentCline = provider.getCurrentTask()
+
+				console.log(currentCline)
+				if (!currentCline) {
+					console.error("[handleEditToolConfirm] No current cline available")
+					return
+				}
+
+				currentCline.handleWebviewAskResponse("approvedWithModification", message.editedMessageContent)
+
+				console.log("converstioon history after ask: ", currentCline.apiConversationHistory)
+			}
+			break
+		}
+
 		case "hasOpenedModeSelector":
 			await updateGlobalState("hasOpenedModeSelector", message.bool ?? true)
 			await provider.postStateToWebview()

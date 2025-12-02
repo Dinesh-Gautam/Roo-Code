@@ -6,7 +6,7 @@ import { VolumeX, Image, WandSparkles, SendHorizontal, MessageSquareX } from "lu
 import { mentionRegex, mentionRegexGlobal, commandRegexGlobal, unescapeSpaces } from "@roo/context-mentions"
 import { WebviewMessage } from "@roo/WebviewMessage"
 import { Mode, getAllModes } from "@roo/modes"
-import { ExtensionMessage } from "@roo/ExtensionMessage"
+import { ExtensionMessage, ClineSayTool } from "@roo/ExtensionMessage"
 
 import { vscode } from "@src/utils/vscode"
 import { useExtensionState } from "@src/context/ExtensionStateContext"
@@ -50,6 +50,7 @@ interface ChatTextAreaProps {
 	modeShortcutText: string
 	// Edit mode props
 	isEditMode?: boolean
+	toolEdit?: ClineSayTool
 	onCancel?: () => void
 	// Browser session status
 	isBrowserSessionActive?: boolean
@@ -73,6 +74,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 			setMode,
 			modeShortcutText,
 			isEditMode = false,
+			toolEdit,
 			onCancel,
 			isBrowserSessionActive = false,
 			showBrowserDockToggle = false,
@@ -902,9 +904,9 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 		const handleModeChange = useCallback(
 			(value: Mode) => {
 				setMode(value)
-				vscode.postMessage({ type: "mode", text: value })
+				if (!toolEdit) vscode.postMessage({ type: "mode", text: value })
 			},
-			[setMode],
+			[setMode, toolEdit],
 		)
 
 		// Helper function to handle API config change
@@ -1090,54 +1092,61 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							/>
 
 							<div className="absolute bottom-2 right-1 z-30 flex flex-col items-center gap-0">
-								<StandardTooltip content={t("chat:addImages")}>
-									<button
-										aria-label={t("chat:addImages")}
-										disabled={shouldDisableImages}
-										onClick={!shouldDisableImages ? onSelectImages : undefined}
-										className={cn(
-											"relative inline-flex items-center justify-center",
-											"bg-transparent border-none p-1.5",
-											"rounded-md min-w-[28px] min-h-[28px]",
-											"text-vscode-descriptionForeground hover:text-vscode-foreground",
-											"transition-all duration-1000",
-											"cursor-pointer",
-											!shouldDisableImages
-												? "opacity-50 hover:opacity-100 delay-750 pointer-events-auto"
-												: "opacity-0 pointer-events-none duration-200 delay-0",
-											!shouldDisableImages &&
-												"hover:bg-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.15)]",
-											"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
-											!shouldDisableImages && "active:bg-[rgba(255,255,255,0.1)]",
-											shouldDisableImages &&
-												"opacity-40 cursor-not-allowed grayscale-[30%] hover:bg-transparent hover:border-[rgba(255,255,255,0.08)] active:bg-transparent",
-										)}>
-										<Image className="w-4 h-4" />
-									</button>
-								</StandardTooltip>
-								<StandardTooltip content={t("chat:enhancePrompt")}>
-									<button
-										aria-label={t("chat:enhancePrompt")}
-										disabled={false}
-										onClick={handleEnhancePrompt}
-										className={cn(
-											"relative inline-flex items-center justify-center",
-											"bg-transparent border-none p-1.5",
-											"rounded-md min-w-[28px] min-h-[28px]",
-											"text-vscode-descriptionForeground hover:text-vscode-foreground",
-											"transition-all duration-1000",
-											"cursor-pointer",
-											hasInputContent
-												? "opacity-50 hover:opacity-100 delay-750 pointer-events-auto"
-												: "opacity-0 pointer-events-none duration-200 delay-0",
-											hasInputContent &&
-												"hover:bg-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.15)]",
-											"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
-											hasInputContent && "active:bg-[rgba(255,255,255,0.1)]",
-										)}>
-										<WandSparkles className={cn("w-4 h-4", isEnhancingPrompt && "animate-spin")} />
-									</button>
-								</StandardTooltip>
+								{!toolEdit && (
+									<>
+										<StandardTooltip content={t("chat:addImages")}>
+											<button
+												aria-label={t("chat:addImages")}
+												disabled={shouldDisableImages}
+												onClick={!shouldDisableImages ? onSelectImages : undefined}
+												className={cn(
+													"relative inline-flex items-center justify-center",
+													"bg-transparent border-none p-1.5",
+													"rounded-md min-w-[28px] min-h-[28px]",
+													"text-vscode-descriptionForeground hover:text-vscode-foreground",
+													"transition-all duration-1000",
+													"cursor-pointer",
+													!shouldDisableImages
+														? "opacity-50 hover:opacity-100 delay-750 pointer-events-auto"
+														: "opacity-0 pointer-events-none duration-200 delay-0",
+													!shouldDisableImages &&
+														"hover:bg-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.15)]",
+													"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
+													!shouldDisableImages && "active:bg-[rgba(255,255,255,0.1)]",
+													shouldDisableImages &&
+														"opacity-40 cursor-not-allowed grayscale-[30%] hover:bg-transparent hover:border-[rgba(255,255,255,0.08)] active:bg-transparent",
+												)}>
+												<Image className="w-4 h-4" />
+											</button>
+										</StandardTooltip>
+										<StandardTooltip content={t("chat:enhancePrompt")}>
+											<button
+												aria-label={t("chat:enhancePrompt")}
+												disabled={false}
+												onClick={handleEnhancePrompt}
+												className={cn(
+													"relative inline-flex items-center justify-center",
+													"bg-transparent border-none p-1.5",
+													"rounded-md min-w-[28px] min-h-[28px]",
+													"text-vscode-descriptionForeground hover:text-vscode-foreground",
+													"transition-all duration-1000",
+													"cursor-pointer",
+													hasInputContent
+														? "opacity-50 hover:opacity-100 delay-750 pointer-events-auto"
+														: "opacity-0 pointer-events-none duration-200 delay-0",
+													hasInputContent &&
+														"hover:bg-[rgba(255,255,255,0.03)] hover:border-[rgba(255,255,255,0.15)]",
+													"focus:outline-none focus-visible:ring-1 focus-visible:ring-vscode-focusBorder",
+													hasInputContent && "active:bg-[rgba(255,255,255,0.1)]",
+												)}>
+												<WandSparkles
+													className={cn("w-4 h-4", isEnhancingPrompt && "animate-spin")}
+												/>
+											</button>
+										</StandardTooltip>
+									</>
+								)}
+
 								{isEditMode && (
 									<StandardTooltip content={t("chat:cancel.title")}>
 										<button
@@ -1226,18 +1235,22 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							customModes={customModes}
 							customModePrompts={customModePrompts}
 						/>
-						<ApiConfigSelector
-							value={currentConfigId}
-							displayName={displayName}
-							disabled={selectApiConfigDisabled}
-							title={t("chat:selectApiConfig")}
-							onChange={handleApiConfigChange}
-							triggerClassName="min-w-[28px] text-ellipsis overflow-hidden flex-shrink"
-							listApiConfigMeta={listApiConfigMeta || []}
-							pinnedApiConfigs={pinnedApiConfigs}
-							togglePinnedApiConfig={togglePinnedApiConfig}
-						/>
-						<AutoApproveDropdown triggerClassName="min-w-[28px] text-ellipsis overflow-hidden flex-shrink" />
+						{!toolEdit && (
+							<>
+								<ApiConfigSelector
+									value={currentConfigId}
+									displayName={displayName}
+									disabled={selectApiConfigDisabled}
+									title={t("chat:selectApiConfig")}
+									onChange={handleApiConfigChange}
+									triggerClassName="min-w-[28px] text-ellipsis overflow-hidden flex-shrink"
+									listApiConfigMeta={listApiConfigMeta || []}
+									pinnedApiConfigs={pinnedApiConfigs}
+									togglePinnedApiConfig={togglePinnedApiConfig}
+								/>
+								<AutoApproveDropdown triggerClassName="min-w-[28px] text-ellipsis overflow-hidden flex-shrink" />
+							</>
+						)}
 					</div>
 					<div
 						className={cn(

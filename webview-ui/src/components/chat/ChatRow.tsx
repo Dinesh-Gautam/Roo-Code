@@ -5,7 +5,7 @@ import deepEqual from "fast-deep-equal"
 import { VSCodeBadge } from "@vscode/webview-ui-toolkit/react"
 
 import type { ClineMessage, FollowUpData, SuggestionItem } from "@roo-code/types"
-import { Mode } from "@roo/modes"
+import { getModeBySlug, Mode } from "@roo/modes"
 
 import { ClineApiReqInfo, ClineAskUseMcpServer, ClineSayTool } from "@roo/ExtensionMessage"
 import { COMMAND_OUTPUT_STRING } from "@roo/combineCommandSequences"
@@ -150,6 +150,13 @@ const ChatRow = memo(
 
 export default ChatRow
 
+const editTypes = {
+	user_message: "submitEditedMessage",
+	tool_edit: "submitEditedTool",
+} as const
+
+type EditTypes = keyof typeof editTypes
+
 export const ChatRowContent = ({
 	message,
 	lastModifiedMessage,
@@ -190,14 +197,17 @@ export const ChatRowContent = ({
 	}, [onToggleExpand, message.ts])
 
 	// Handle edit button click
-	const handleEditClick = useCallback(() => {
-		setIsEditing(true)
-		setEditedContent(message.text || "")
-		setEditImages(message.images || [])
-		setEditMode(mode || "code")
-		// Edit mode is now handled entirely in the frontend
-		// No need to notify the backend
-	}, [message.text, message.images, mode])
+	const handleEditClick = useCallback(
+		(text?: string, editMode?: string) => {
+			setIsEditing(true)
+			setEditedContent(text || message.text || "")
+			setEditImages(message.images || [])
+			setEditMode(editMode || mode || "code")
+			// Edit mode is now handled entirely in the frontend
+			// No need to notify the backend
+		},
+		[message.text, message.images, mode],
+	)
 
 	// Handle cancel edit
 	const handleCancelEdit = useCallback(() => {
@@ -208,16 +218,29 @@ export const ChatRowContent = ({
 	}, [message.text, message.images, mode])
 
 	// Handle save edit
-	const handleSaveEdit = useCallback(() => {
-		setIsEditing(false)
-		// Send edited message to backend
-		vscode.postMessage({
-			type: "submitEditedMessage",
-			value: message.ts,
-			editedMessageContent: editedContent,
-			images: editImages,
-		})
-	}, [message.ts, editedContent, editImages])
+	const handleSaveEdit = useCallback(
+		(type: EditTypes, tool?: ClineSayTool) => {
+			setIsEditing(false)
+			// Send edited message to backend
+			let content = editedContent
+
+			if (tool) {
+				content = JSON.stringify({
+					...tool,
+					content: editedContent,
+					mode: editMode,
+				} as ClineSayTool)
+			}
+
+			vscode.postMessage({
+				type: editTypes[type],
+				value: message.ts,
+				editedMessageContent: content,
+				images: editImages,
+			})
+		},
+		[message.ts, editMode, editedContent, editImages],
+	)
 
 	// Handle image selection for editing
 	const handleSelectImages = useCallback(() => {
@@ -363,10 +386,17 @@ export const ChatRowContent = ({
 		wordBreak: "break-word",
 	}
 
-	const tool = useMemo(
-		() => (message.ask === "tool" ? safeJsonParse<ClineSayTool>(message.text) : null),
-		[message.ask, message.text],
-	)
+	const { tool, toolMode } = useMemo(() => {
+		let parsedTool, toolMode
+
+		if (message.ask === "tool" || message.say === "user_tool_modification") {
+			parsedTool = safeJsonParse<ClineSayTool>(message.text)
+
+			if (parsedTool?.mode) toolMode = getModeBySlug(parsedTool.mode)
+		}
+
+		return { tool: parsedTool, toolMode }
+	}, [message.ask, message.say, message.text])
 
 	// Unified diff content (provided by backend when relevant)
 	const unifiedDiff = useMemo(() => {
@@ -820,11 +850,19 @@ export const ChatRowContent = ({
 						<div style={headerStyle}>
 							{toolIcon("tasklist")}
 							<span style={{ fontWeight: "bold" }}>
-								<Trans
-									i18nKey="chat:subtasks.wantsToCreate"
-									components={{ code: <code>{tool.mode}</code> }}
-									values={{ mode: tool.mode }}
-								/>
+								{message.say === "user_tool_modification" ? (
+									<Trans
+										i18nKey={"chat:subtasks.userEdited"}
+										components={{ code: <code>{toolMode?.name}</code> }}
+										values={{ mode: toolMode?.name }}
+									/>
+								) : (
+									<Trans
+										i18nKey={"chat:subtasks.wantsToCreate"}
+										components={{ code: <code>{toolMode?.name}</code> }}
+										values={{ mode: toolMode?.name }}
+									/>
+								)}
 							</span>
 						</div>
 						<div
@@ -846,13 +884,61 @@ export const ChatRowContent = ({
 									color: "var(--vscode-badge-foreground)",
 									display: "flex",
 									alignItems: "center",
+									justifyContent: "space-between",
 									gap: "6px",
 								}}>
-								<span className="codicon codicon-arrow-right"></span>
-								{t("chat:subtasks.newTaskContent")}
+								<div
+									style={{
+										display: "flex",
+										alignItems: "center",
+										gap: "6px",
+									}}>
+									<span className="codicon codicon-arrow-right"></span>
+									{t("chat:subtasks.newTaskContent")}
+								</div>
+								{isLast && (
+									<div
+										className="cursor-pointer shrink-0"
+										style={{
+											visibility: isStreaming ? "hidden" : "visible",
+										}}
+										onClick={(e) => {
+											e.stopPropagation()
+											handleEditClick(tool.content, tool.mode)
+										}}>
+										<div>
+											<Edit className="w-4 shrink-0" aria-label="Edit subtask icon" />
+										</div>
+									</div>
+								)}
 							</div>
-							<div style={{ padding: "12px 16px", backgroundColor: "var(--vscode-editor-background)" }}>
-								<MarkdownBlock markdown={tool.content} />
+							<div
+								style={{
+									padding: isEditing ? "" : "12px 16px",
+									backgroundColor: "var(--vscode-editor-background)",
+								}}>
+								{isEditing ? (
+									<ChatTextArea
+										inputValue={editedContent}
+										setInputValue={setEditedContent}
+										sendingDisabled={false}
+										selectApiConfigDisabled={true}
+										placeholderText={t("chat:editMessage.placeholder")}
+										selectedImages={editImages}
+										setSelectedImages={setEditImages}
+										onSend={() => handleSaveEdit("tool_edit", tool)}
+										onSelectImages={handleSelectImages}
+										shouldDisableImages={!model?.supportsImages}
+										mode={editMode}
+										setMode={setEditMode}
+										modeShortcutText=""
+										isEditMode={true}
+										toolEdit={tool}
+										onCancel={handleCancelEdit}
+									/>
+								) : (
+									<MarkdownBlock markdown={tool.content} />
+								)}
 							</div>
 						</div>
 					</>
@@ -1163,7 +1249,7 @@ export const ChatRowContent = ({
 											placeholderText={t("chat:editMessage.placeholder")}
 											selectedImages={editImages}
 											setSelectedImages={setEditImages}
-											onSend={handleSaveEdit}
+											onSend={() => handleSaveEdit("user_message")}
 											onSelectImages={handleSelectImages}
 											shouldDisableImages={!model?.supportsImages}
 											mode={editMode}

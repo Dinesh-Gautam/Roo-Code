@@ -14,7 +14,12 @@ import {
 
 import { Mode } from "./modes"
 
-export type ClineAskResponse = "yesButtonClicked" | "noButtonClicked" | "messageResponse" | "objectResponse"
+export type ClineAskResponse =
+	| "yesButtonClicked"
+	| "noButtonClicked"
+	| "messageResponse"
+	| "objectResponse"
+	| "approvedWithModification"
 
 export type PromptMode = Mode | "enhance"
 
@@ -92,6 +97,7 @@ export interface WebviewMessage {
 		| "deleteMessage"
 		| "deleteMessageConfirm"
 		| "submitEditedMessage"
+		| "submitEditedTool"
 		| "editMessageConfirm"
 		| "enableMcpServerCreation"
 		| "remoteControlEnabled"
